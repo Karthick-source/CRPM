@@ -106,13 +106,11 @@ def record_purchase(conn):
                 st.error(f"Error: {e}")
 
 
-# Display analytics with visualizations
+# Analytics visualizations
 def show_analytics(conn):
     try:
-        # Total purchases
-        cursor = conn.cursor(dictionary=True)
-        
         # Total revenue over time
+        cursor = conn.cursor(dictionary=True)
         cursor.execute("""
             SELECT p.purchase_date, SUM(pr.price * p.quantity) AS total_revenue
             FROM purchases p
@@ -137,6 +135,42 @@ def show_analytics(conn):
         st.error(f"Error fetching analytics: {e}")
 
 
+# Functionality to manage (activate/deactivate) customer statuses
+def toggle_customer_status(conn):
+    st.write("### Manage Customer Status")
+    try:
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM customers")  # Fetch all customers
+        customers = cursor.fetchall()
+
+        if customers:
+            # Display customers without nesting expanders
+            for customer in customers:
+                st.write(f"Customer ID: {customer['customer_id']}")
+                st.write(f"Name: {customer['name']}")
+                st.write(f"Status: {customer['status']}")
+                
+                if customer['status'] == 'Active':
+                    if st.button(f"Deactivate {customer['name']}", key=f"deactivate_{customer['customer_id']}"):
+                        cursor.execute("UPDATE customers SET status = 'Inactive' WHERE customer_id = %s",
+                                       (customer['customer_id'],))
+                        conn.commit()
+                        st.success(f"{customer['name']} deactivated successfully!")
+                        
+                elif customer['status'] == 'Inactive':
+                    if st.button(f"Activate {customer['name']}", key=f"activate_{customer['customer_id']}"):
+                        cursor.execute("UPDATE customers SET status = 'Active' WHERE customer_id = %s",
+                                       (customer['customer_id'],))
+                        conn.commit()
+                        st.success(f"{customer['name']} activated successfully!")
+                        
+        else:
+            st.info("No customers found in the database.")
+    except Error as e:
+        st.error(f"Error fetching or updating customers: {e}")
+
+
+
 # Streamlit App UI
 st.set_page_config(
     page_title="Customer, Product & Purchase Dashboard",
@@ -158,7 +192,8 @@ if conn:
             "View Products",
             "Add New Product",
             "Record Purchase",
-            "Analytics"
+            "Analytics",
+            "Manage Customer Status"
         ]
     )
 
@@ -174,33 +209,18 @@ if conn:
         with st.expander("Product Search Section", expanded=True):
             view_products(conn)
 
-    elif menu == "Add New Product":
-        with st.expander("Add New Product", expanded=True):
-            st.write("### Add Product")
-            with st.form(key="new_product_form"):
-                name = st.text_input("Product Name")
-                price = st.number_input("Price", min_value=0.0, step=0.01)
-                stock = st.number_input("Stock", min_value=0, step=1)
-                submitted = st.form_submit_button("Add Product")
-                if submitted:
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("INSERT INTO products (name, price, stock) VALUES (%s, %s, %s)",
-                                       (name, price, stock))
-                        conn.commit()
-                        st.success("Product added successfully!")
-                    except Error as e:
-                        st.error(f"Error: {e}")
-
     elif menu == "Record Purchase":
-        with st.expander("Record a new purchase", expanded=True):
+        with st.expander("Record Purchase Section", expanded=True):
             record_purchase(conn)
 
     elif menu == "Analytics":
         with st.expander("View Analytics", expanded=True):
             show_analytics(conn)
 
-    # Close database connection after finishing navigation
+    elif menu == "Manage Customer Status":
+        with st.expander("Customer Activation/Deactivation Section", expanded=True):
+            toggle_customer_status(conn)
+
     conn.close()
 else:
     st.error("Could not establish database connection.")
